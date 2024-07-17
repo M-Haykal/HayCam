@@ -1,6 +1,6 @@
+import 'package:HayCam/PreviewPage.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:haycam/PreviewPage.dart';
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -119,7 +119,6 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
         navigator.push(MaterialPageRoute(
             builder: (context) => PreviewPage(
                   imagePath: xFile.path,
-                  videoPath: 'video',
                 )));
       }
     }
@@ -133,7 +132,6 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
         navigator.push(MaterialPageRoute(
             builder: (context) => PreviewPage(
                   videoPath: xFile.path,
-                  imagePath: 'photo',
                 )));
       }
     }
@@ -160,7 +158,6 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                   child: Icon(
                     Icons.camera_alt,
                     color: Colors.black,
-                    size: 30,
                   ),
                 ),
               ElevatedButton(

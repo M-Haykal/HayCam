@@ -1,8 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
-import 'dart:typed_data';
+import 'package:gallery_saver/gallery_saver.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:widget_zoom/widget_zoom.dart';
 
 class PreviewPage extends StatefulWidget {
   final String? imagePath;
@@ -16,6 +17,10 @@ class PreviewPage extends StatefulWidget {
 
 class _PreviewPageState extends State<PreviewPage> {
   VideoPlayerController? controller;
+
+  Future<void> requestPermissions() async {
+    await Permission.storage.request();
+  }
 
   Future<void> _startVideoPlayer() async {
     if (widget.videoPath != null) {
@@ -32,26 +37,56 @@ class _PreviewPageState extends State<PreviewPage> {
   }
 
   Future<void> _saveToGallery(String filePath) async {
-    final file = File(filePath);
-    if (await file.exists()) {
-      final bytes = await file.readAsBytes();
-      final result = await ImageGallerySaver.saveFile(filePath,
-          name: "HayCam/${file.uri.pathSegments.last}");
-      if (result['isSuccess']) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved to Gallery: ${result['filePath']}')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save to gallery')),
-        );
+    try {
+      final file = File(filePath);
+
+      if (!(await file.exists())) {
+        throw FileSystemException('File does not exist at path: $filePath');
       }
+
+      String correctFilePath = filePath;
+      final fileType = filePath.split('.').last.toLowerCase();
+      if (fileType == 'temp') {
+        correctFilePath = filePath.replaceAll('.temp', '.mp4');
+        await file.rename(correctFilePath);
+      }
+
+      final newFileType = correctFilePath.split('.').last.toLowerCase();
+      const supportedImageTypes = ['jpg', 'jpeg', 'png'];
+      const supportedVideoTypes = ['mp4', 'mov', 'avi'];
+
+      if (!supportedImageTypes.contains(newFileType) &&
+          !supportedVideoTypes.contains(newFileType)) {
+        throw Exception('Unsupported file type: $newFileType');
+      }
+
+      bool isSaved = false;
+      if (supportedImageTypes.contains(newFileType)) {
+        isSaved = (await GallerySaver.saveImage(correctFilePath))!;
+      } else if (supportedVideoTypes.contains(newFileType)) {
+        isSaved = (await GallerySaver.saveVideo(correctFilePath))!;
+      }
+
+      if (!isSaved) {
+        throw Exception('Failed to save to gallery');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved to Gallery: $correctFilePath')),
+      );
+    } catch (e) {
+      debugPrint('Error saving file: $e');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error saving file: $e')),
+      );
     }
   }
 
   @override
   void initState() {
     super.initState();
+    requestPermissions();
     if (widget.videoPath != null) {
       _startVideoPlayer();
     }
@@ -84,9 +119,25 @@ class _PreviewPageState extends State<PreviewPage> {
       ),
       body: Center(
         child: widget.imagePath != null
-            ? Image.file(
-                File(widget.imagePath ?? ""),
-                fit: BoxFit.cover,
+            ? FutureBuilder<bool>(
+                future: File(widget.imagePath!).exists(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.done) {
+                    if (snapshot.data ?? false) {
+                      return WidgetZoom(
+                        heroAnimationTag: 'tag',
+                        zoomWidget: Image.file(
+                          File(widget.imagePath!),
+                          fit: BoxFit.cover,
+                        ),
+                      );
+                    } else {
+                      return Text('Image file not found');
+                    }
+                  } else {
+                    return CircularProgressIndicator();
+                  }
+                },
               )
             : controller != null && controller!.value.isInitialized
                 ? AspectRatio(
