@@ -1,6 +1,7 @@
 import 'package:HayCam/PreviewPage.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:HayCam/QRCodeScannerPage.dart';
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -31,7 +32,7 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     final previousCameraController = _controller;
 
     final CameraController cameraController = CameraController(
-        description, ResolutionPreset.high,
+        description, ResolutionPreset.max,
         imageFormatGroup: ImageFormatGroup.jpeg);
 
     try {
@@ -142,6 +143,31 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     if (_isCameraInitialized) {
       return SafeArea(
           child: Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          title: Text(
+            "HayCam",
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          actions: <Widget>[
+            IconButton(
+              icon: Icon(
+                Icons.qr_code,
+                color: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => QRCodeScannerPage()));
+              },
+            )
+          ],
+        ),
         body: Column(children: [
           Expanded(child: CameraPreview(_controller!)),
           Row(

@@ -4,6 +4,8 @@ import 'package:video_player/video_player.dart';
 import 'package:gallery_saver/gallery_saver.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:widget_zoom/widget_zoom.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:share_plus/share_plus.dart';
 
 class PreviewPage extends StatefulWidget {
   final String? imagePath;
@@ -103,18 +105,53 @@ class _PreviewPageState extends State<PreviewPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Preview'),
+        centerTitle: true,
         actions: [
-          if (widget.imagePath != null || widget.videoPath != null)
-            IconButton(
-              icon: Icon(Icons.save),
-              onPressed: () {
+          PopupMenuButton(
+            onSelected: (value) async {
+              if (value == 'Save') {
                 if (widget.imagePath != null) {
                   _saveToGallery(widget.imagePath!);
                 } else if (widget.videoPath != null) {
                   _saveToGallery(widget.videoPath!);
                 }
-              },
-            ),
+              } else if (value == 'Share') {
+                if (widget.imagePath != null) {
+                  final xFile = XFile(widget.imagePath!);
+                  await Share.shareXFiles([xFile],
+                      text: 'Check out this image!');
+                } else if (widget.videoPath != null) {
+                  final xFile = XFile(widget.videoPath!);
+                  await Share.shareXFiles([xFile],
+                      text: 'Check out this video!');
+                }
+              }
+            },
+            itemBuilder: (BuildContext bc) {
+              return [
+                PopupMenuItem(
+                  value: 'Save',
+                  child: Row(
+                    children: [
+                      Icon(Icons.save),
+                      SizedBox(width: 10),
+                      Text('Save'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'Share',
+                  child: Row(
+                    children: [
+                      Icon(Icons.share),
+                      SizedBox(width: 10),
+                      Text('Share'),
+                    ],
+                  ),
+                ),
+              ];
+            },
+          )
         ],
       ),
       body: Center(
