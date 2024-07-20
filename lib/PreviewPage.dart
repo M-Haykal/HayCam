@@ -6,6 +6,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:widget_zoom/widget_zoom.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:image/image.dart' as img;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
 
 class PreviewPage extends StatefulWidget {
   final String? imagePath;
@@ -85,6 +89,75 @@ class _PreviewPageState extends State<PreviewPage> {
     }
   }
 
+  Future<void> _convertImageToPng(String imagePath) async {
+    try {
+      final imageFile = File(imagePath);
+      final imageBytes = await imageFile.readAsBytes();
+      final image = img.decodeImage(imageBytes);
+
+      if (image != null) {
+        final pngBytes = img.encodePng(image);
+        final pngFile =
+            File(imagePath.replaceAll(RegExp(r'\.(jpg|jpeg)$'), '.png'));
+        await pngFile.writeAsBytes(pngBytes);
+        await GallerySaver.saveImage(pngFile.path);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Image converted to PNG and saved to Gallery')),
+        );
+      } else {
+        throw Exception('Failed to decode image');
+      }
+    } catch (e) {
+      debugPrint('Error converting image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error converting image: $e')),
+      );
+    }
+  }
+
+  Future<void> _convertImageToPdf(String imagePath) async {
+    try {
+      final imageFile = File(imagePath);
+      final imageBytes = await imageFile.readAsBytes();
+      final image = img.decodeImage(imageBytes);
+
+      if (image != null) {
+        final pdf = pw.Document();
+        final pdfImage = pw.MemoryImage(imageBytes);
+
+        pdf.addPage(
+          pw.Page(
+            build: (pw.Context context) {
+              return pw.Center(
+                child: pw.Image(pdfImage),
+              );
+            },
+          ),
+        );
+
+        final outputDir = await getExternalStorageDirectory();
+        final pdfFile = File(
+            '${outputDir!.path}/${DateTime.now().millisecondsSinceEpoch}.pdf');
+        await pdfFile.writeAsBytes(await pdf.save());
+        await GallerySaver.saveImage(pdfFile.path);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Image converted to PDF and saved to gallery')),
+        );
+      } else {
+        throw Exception('Failed to decode image');
+      }
+    } catch (e) {
+      debugPrint('Error converting image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error converting image: $e')),
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -125,6 +198,14 @@ class _PreviewPageState extends State<PreviewPage> {
                   await Share.shareXFiles([xFile],
                       text: 'Check out this video!');
                 }
+              } else if (value == 'Convert to PNG') {
+                if (widget.imagePath != null) {
+                  _convertImageToPng(widget.imagePath!);
+                }
+              } else if (value == 'Convert to PDF') {
+                if (widget.imagePath != null) {
+                  _convertImageToPdf(widget.imagePath!);
+                }
               }
             },
             itemBuilder: (BuildContext bc) {
@@ -149,6 +230,28 @@ class _PreviewPageState extends State<PreviewPage> {
                     ],
                   ),
                 ),
+                if (widget.imagePath != null) ...[
+                  PopupMenuItem(
+                    value: 'Convert to PNG',
+                    child: Row(
+                      children: [
+                        Icon(Icons.image),
+                        SizedBox(width: 10),
+                        Text('Convert to PNG'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'Convert to PDF',
+                    child: Row(
+                      children: [
+                        Icon(Icons.picture_as_pdf),
+                        SizedBox(width: 10),
+                        Text('Convert to PDF'),
+                      ],
+                    ),
+                  ),
+                ]
               ];
             },
           )

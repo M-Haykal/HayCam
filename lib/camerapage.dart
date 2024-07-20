@@ -1,7 +1,8 @@
 import 'package:HayCam/PreviewPage.dart';
+import 'package:HayCam/imageConvert.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:HayCam/QRCodeScannerPage.dart';
+import 'package:toggle_switch/toggle_switch.dart';
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -13,8 +14,10 @@ class CameraPage extends StatefulWidget {
 class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   CameraController? _controller;
   bool _isCameraInitialized = false;
-  late final List<CameraDescription> _cameras;
+  late List<CameraDescription> _cameras;
+  CameraDescription? _currentCamera;
   bool _isRecording = false;
+  int _selectedMode = 0; // 0: Photo, 1: Video, 2: QR Code
 
   @override
   void initState() {
@@ -24,35 +27,37 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   }
 
   Future<void> initCamera() async {
-    _cameras = await availableCameras();
-    await onNewCameraSelected(_cameras.first);
+    try {
+      _cameras = await availableCameras();
+      _currentCamera = _cameras.first;
+      await onNewCameraSelected(_currentCamera!);
+    } catch (e) {
+      debugPrint('Error initializing cameras: $e');
+    }
   }
 
   Future<void> onNewCameraSelected(CameraDescription description) async {
-    final previousCameraController = _controller;
+    if (_controller != null) {
+      await _controller?.dispose();
+    }
 
     final CameraController cameraController = CameraController(
-        description, ResolutionPreset.max,
-        imageFormatGroup: ImageFormatGroup.jpeg);
+      description,
+      ResolutionPreset.max,
+      imageFormatGroup: ImageFormatGroup.jpeg,
+    );
 
     try {
       await cameraController.initialize();
+      if (mounted) {
+        setState(() {
+          _controller = cameraController;
+          _isCameraInitialized = _controller!.value.isInitialized;
+        });
+      }
     } on CameraException catch (e) {
       debugPrint('Error initializing camera: $e');
     }
-
-    await previousCameraController?.dispose();
-
-    if (mounted) {
-      setState(() {
-        _controller = cameraController;
-        _isCameraInitialized = _controller!.value.isInitialized;
-      });
-    }
-
-    cameraController.addListener(() {
-      if (mounted) setState(() {});
-    });
   }
 
   @override
@@ -88,7 +93,7 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       XFile file = await cameraController.takePicture();
       return file;
     } on CameraException catch (e) {
-      debugPrint('Error occured while taking picture: $e');
+      debugPrint('Error occurred while taking picture: $e');
       return null;
     }
   }
@@ -107,7 +112,7 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       });
       return video;
     } on CameraException catch (e) {
-      debugPrint('Error occured while taking picture: $e');
+      debugPrint('Error occurred while recording video: $e');
       return null;
     }
   }
@@ -138,68 +143,103 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     }
   }
 
+  void _onSwitchCamera() async {
+    if (_cameras.length > 1) {
+      try {
+        final CameraDescription newCamera =
+            _currentCamera == _cameras.first ? _cameras.last : _cameras.first;
+        await onNewCameraSelected(newCamera);
+        setState(() {
+          _currentCamera = newCamera;
+        });
+      } catch (e) {
+        debugPrint('Error switching camera: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isCameraInitialized) {
       return SafeArea(
-          child: Scaffold(
-        extendBodyBehindAppBar: true,
-        appBar: AppBar(
-          title: Text(
-            "HayCam",
-            style: TextStyle(color: Colors.white),
-          ),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          shadowColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          actions: <Widget>[
-            IconButton(
-              icon: Icon(
-                Icons.qr_code,
-                color: Colors.white,
-              ),
-              onPressed: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => QRCodeScannerPage()));
-              },
-            )
-          ],
-        ),
-        body: Column(children: [
-          Expanded(child: CameraPreview(_controller!)),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (!_isRecording)
-                ElevatedButton(
-                  onPressed: _onTakePhotoPressed,
-                  style: ElevatedButton.styleFrom(
-                    fixedSize: Size(70, 70),
-                    shape: CircleBorder(),
-                    backgroundColor: Colors.white,
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: AppBar(
+            title: Text(
+              "HayCam",
+              style: TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            shadowColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            actions: <Widget>[
+              IconButton(
+                  icon: Icon(
+                    Icons.image,
+                    color: Colors.white,
                   ),
-                  child: Icon(
-                    Icons.camera_alt,
-                    color: Colors.black,
-                  ),
-                ),
-              ElevatedButton(
-                  onPressed: _isRecording ? null : _onRecordingVideoPressed,
-                  style: ElevatedButton.styleFrom(
-                      fixedSize: Size(70, 70),
-                      shape: CircleBorder(),
-                      backgroundColor: Colors.white),
-                  child: Icon(
-                    _isRecording ? Icons.stop : Icons.videocam,
-                    color: Colors.red,
-                  ))
+                  onPressed: (() {
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => ImageConvert()));
+                  }))
             ],
           ),
-        ]),
-      ));
+          body: Column(
+            children: [
+              Expanded(child: CameraPreview(_controller!)),
+              ToggleSwitch(
+                initialLabelIndex: _selectedMode,
+                totalSwitches: 3,
+                labels: ['Photo', 'Video', 'QR Code'],
+                onToggle: (index) {
+                  setState(() {
+                    _selectedMode = index!;
+                    if (_selectedMode == 2) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ImageConvert(),
+                        ),
+                      );
+                    }
+                  });
+                },
+              ),
+              if (_selectedMode != 2)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.switch_camera_rounded,
+                          color: Colors.white),
+                      onPressed: _onSwitchCamera,
+                    ),
+                    if (!_isRecording && _selectedMode == 0)
+                      IconButton(
+                        onPressed: _onTakePhotoPressed,
+                        icon: Icon(
+                          Icons.camera_alt,
+                          color: Colors.white,
+                        ),
+                      ),
+                    if (_selectedMode == 1)
+                      IconButton(
+                        onPressed:
+                            _isRecording ? null : _onRecordingVideoPressed,
+                        icon: Icon(
+                          _isRecording ? Icons.stop : Icons.videocam,
+                          color: Colors.red,
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      );
     } else {
       return Scaffold(
         body: Center(

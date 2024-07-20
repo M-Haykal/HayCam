@@ -6,7 +6,7 @@
 
 
     <application
-        android:label="haycam"
+        android:label="HayCam"
         android:name="${applicationName}"
         android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/launcher_icon">
