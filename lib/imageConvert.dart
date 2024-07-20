@@ -45,20 +45,16 @@ class _ImageConvertState extends State<ImageConvert> {
       return;
     }
 
-    // Read the image file
     final imageBytes = await _image!.readAsBytes();
     final image = img.decodeImage(imageBytes);
 
     if (image != null) {
-      // Convert image to PNG
       final pngBytes = img.encodePng(image);
 
-      // Save the PNG image
       final pngFile =
           File(_image!.path.replaceAll(RegExp(r'\.(jpg|jpeg)$'), '.png'));
       await pngFile.writeAsBytes(pngBytes);
 
-      // Save the PNG image to gallery
       final saved = await GallerySaver.saveImage(pngFile.path);
 
       if (saved != null && saved) {

@@ -17,7 +17,8 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   late List<CameraDescription> _cameras;
   CameraDescription? _currentCamera;
   bool _isRecording = false;
-  int _selectedMode = 0; // 0: Photo, 1: Video, 2: QR Code
+  int _selectedMode = 0;
+  late bool _isFlashOn = false;
 
   @override
   void initState() {
@@ -53,6 +54,9 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
         setState(() {
           _controller = cameraController;
           _isCameraInitialized = _controller!.value.isInitialized;
+          if (_isFlashOn) {
+            _controller?.setFlashMode(FlashMode.torch);
+          }
         });
       }
     } on CameraException catch (e) {
@@ -89,7 +93,9 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     }
 
     try {
-      await cameraController.setFlashMode(FlashMode.off);
+      if (_isFlashOn) {
+        await cameraController.setFlashMode(FlashMode.torch);
+      }
       XFile file = await cameraController.takePicture();
       return file;
     } on CameraException catch (e) {
@@ -104,6 +110,9 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
       setState(() {
         _isRecording = true;
       });
+      if (_isFlashOn) {
+        await cameraController?.setFlashMode(FlashMode.torch);
+      }
       await cameraController?.startVideoRecording();
       await Future.delayed(Duration(seconds: 5));
       final video = await cameraController?.stopVideoRecording();
@@ -158,94 +167,120 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> toggleFlashLight() async {
+    try {
+      if (_controller == null || !_controller!.value.isInitialized) {
+        debugPrint('Camera controller is not initialized or not ready');
+        return;
+      }
+
+      if (_isFlashOn) {
+        await _controller?.setFlashMode(FlashMode.off);
+        debugPrint('Flash turned off');
+      } else {
+        await _controller?.setFlashMode(FlashMode.torch);
+        debugPrint('Flash turned on');
+      }
+      setState(() {
+        _isFlashOn = !_isFlashOn;
+      });
+    } catch (e) {
+      debugPrint('Error toggling flash: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_isCameraInitialized) {
-      return SafeArea(
-        child: Scaffold(
-          extendBodyBehindAppBar: true,
-          appBar: AppBar(
-            title: Text(
-              "HayCam",
-              style: TextStyle(color: Colors.white),
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: Text(
+          "HayCam",
+          style: TextStyle(color: Colors.white),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        actions: <Widget>[
+          IconButton(
+            icon: Icon(
+              Icons.image,
+              color: Colors.white,
             ),
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            shadowColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            actions: <Widget>[
-              IconButton(
-                  icon: Icon(
-                    Icons.image,
-                    color: Colors.white,
-                  ),
-                  onPressed: (() {
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => ImageConvert()));
-                  }))
-            ],
+            onPressed: () {
+              Navigator.push(context,
+                  MaterialPageRoute(builder: (context) => ImageConvert()));
+            },
           ),
-          body: Column(
-            children: [
-              Expanded(child: CameraPreview(_controller!)),
-              ToggleSwitch(
-                initialLabelIndex: _selectedMode,
-                totalSwitches: 3,
-                labels: ['Photo', 'Video', 'QR Code'],
-                onToggle: (index) {
-                  setState(() {
-                    _selectedMode = index!;
-                    if (_selectedMode == 2) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ImageConvert(),
-                        ),
-                      );
-                    }
-                  });
-                },
-              ),
-              if (_selectedMode != 2)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.switch_camera_rounded,
-                          color: Colors.white),
-                      onPressed: _onSwitchCamera,
-                    ),
-                    if (!_isRecording && _selectedMode == 0)
+        ],
+      ),
+      body: _isCameraInitialized
+          ? Column(
+              children: [
+                Expanded(
+                  child: _controller == null
+                      ? Center(child: CircularProgressIndicator())
+                      : CameraPreview(_controller!),
+                ),
+                ToggleSwitch(
+                  initialLabelIndex: _selectedMode,
+                  totalSwitches: 3,
+                  labels: ['Photo', 'Video', 'QR Code'],
+                  onToggle: (index) {
+                    setState(() {
+                      _selectedMode = index!;
+                      if (_selectedMode == 2) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ImageConvert(),
+                          ),
+                        );
+                      }
+                    });
+                  },
+                ),
+                if (_selectedMode != 2)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
                       IconButton(
-                        onPressed: _onTakePhotoPressed,
+                        onPressed: toggleFlashLight,
                         icon: Icon(
-                          Icons.camera_alt,
+                          _isFlashOn ? Icons.flash_off : Icons.flash_on,
                           color: Colors.white,
                         ),
                       ),
-                    if (_selectedMode == 1)
                       IconButton(
-                        onPressed:
-                            _isRecording ? null : _onRecordingVideoPressed,
-                        icon: Icon(
-                          _isRecording ? Icons.stop : Icons.videocam,
-                          color: Colors.red,
-                        ),
+                        icon: Icon(Icons.switch_camera_rounded,
+                            color: Colors.white),
+                        onPressed: _onSwitchCamera,
                       ),
-                  ],
-                ),
-            ],
-          ),
-        ),
-      );
-    } else {
-      return Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
+                      if (!_isRecording && _selectedMode == 0)
+                        IconButton(
+                          onPressed: _onTakePhotoPressed,
+                          icon: Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                          ),
+                        ),
+                      if (_selectedMode == 1)
+                        IconButton(
+                          onPressed:
+                              _isRecording ? null : _onRecordingVideoPressed,
+                          icon: Icon(
+                            _isRecording ? Icons.stop : Icons.videocam,
+                            color: Colors.red,
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            )
+          : Center(
+              child: CircularProgressIndicator(),
+            ),
+    );
   }
 }
