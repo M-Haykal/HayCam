@@ -13,79 +13,61 @@ class ImageConvert extends StatefulWidget {
 }
 
 class _ImageConvertState extends State<ImageConvert> {
-  File? _image;
+  List<File> _images = [];
   final ImagePicker _picker = ImagePicker();
-  String _status = 'No image selected';
-  bool _isImageSelected = false;
+  String _status = 'No images selected';
 
-  Future<void> _pickImage() async {
-    final XFile? pickedFile =
-        await _picker.pickImage(source: ImageSource.gallery);
+  Future<void> _pickImages() async {
+    final List<XFile>? pickedFiles = await _picker.pickMultiImage();
 
-    if (pickedFile != null) {
-      File imageFile = File(pickedFile.path);
+    if (pickedFiles != null && pickedFiles.isNotEmpty) {
+      List<File> imageFiles =
+          pickedFiles.map((pickedFile) => File(pickedFile.path)).toList();
       setState(() {
-        _image = imageFile;
-        _status = 'Image selected';
-        _isImageSelected = true;
+        _images = imageFiles;
+        _status = '${_images.length} images selected';
       });
     } else {
       setState(() {
-        _status = 'No image selected';
-        _isImageSelected = false;
+        _status = 'No images selected';
       });
     }
   }
 
-  Future<void> _convertImageToPng() async {
-    if (_image == null) {
-      setState(() {
-        _status = 'No image to convert';
-      });
-      return;
-    }
+  Future<bool> _convertImageToPng(File image) async {
+    final imageBytes = await image.readAsBytes();
+    final decodedImage = img.decodeImage(imageBytes);
 
-    final imageBytes = await _image!.readAsBytes();
-    final image = img.decodeImage(imageBytes);
-
-    if (image != null) {
-      final pngBytes = img.encodePng(image);
-
+    if (decodedImage != null) {
+      final pngBytes = img.encodePng(decodedImage);
       final pngFile =
-          File(_image!.path.replaceAll(RegExp(r'\.(jpg|jpeg)$'), '.png'));
+          File(image.path.replaceAll(RegExp(r'\.(jpg|jpeg)$'), '.png'));
       await pngFile.writeAsBytes(pngBytes);
 
       final saved = await GallerySaver.saveImage(pngFile.path);
-
-      if (saved != null && saved) {
-        setState(() {
-          _status =
-              'Image converted to PNG and saved to gallery as ${pngFile.path}';
-        });
-      } else {
-        setState(() {
-          _status = 'Failed to save image to gallery';
-        });
-      }
-    } else {
-      setState(() {
-        _status = 'Failed to decode image';
-      });
+      return saved != null && saved;
     }
+    return false;
   }
 
-  Future<void> _convertImageToPdf() async {
-    if (_image == null) {
-      setState(() {
-        _status = 'No image to convert';
-      });
-      return;
+  Future<void> _convertAllImagesToPng() async {
+    bool allConverted = true;
+    for (File image in _images) {
+      bool result = await _convertImageToPng(image);
+      if (!result) allConverted = false;
     }
+    setState(() {
+      _status = allConverted
+          ? 'All images converted to PNG and saved to gallery'
+          : 'Failed to convert some images to PNG';
+    });
+  }
 
-    final imageBytes = await _image!.readAsBytes();
-    final image = img.decodeImage(imageBytes);
+  Future<bool> _convertImageToPdf(File image) async {
+    final imageBytes = await image.readAsBytes();
+    final decodedImage = img.decodeImage(imageBytes);
 
-    if (image != null) {
+    if (decodedImage != null) {
       final pdf = pw.Document();
       final pdfImage = pw.MemoryImage(imageBytes);
 
@@ -104,14 +86,22 @@ class _ImageConvertState extends State<ImageConvert> {
           '${outputDir!.path}/${DateTime.now().millisecondsSinceEpoch}.pdf');
       await pdfFile.writeAsBytes(await pdf.save());
 
-      setState(() {
-        _status = 'Image converted to PDF and saved as ${pdfFile.path}';
-      });
-    } else {
-      setState(() {
-        _status = 'Failed to decode image';
-      });
+      return true;
     }
+    return false;
+  }
+
+  Future<void> _convertAllImagesToPdf() async {
+    bool allConverted = true;
+    for (File image in _images) {
+      bool result = await _convertImageToPdf(image);
+      if (!result) allConverted = false;
+    }
+    setState(() {
+      _status = allConverted
+          ? 'All images converted to PDF and saved'
+          : 'Failed to convert some images to PDF';
+    });
   }
 
   @override
@@ -125,34 +115,44 @@ class _ImageConvertState extends State<ImageConvert> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             ElevatedButton(
-              onPressed: _pickImage,
-              child: Text('Pick an Image'),
+              onPressed: _pickImages,
+              child: Text('Pick Images'),
             ),
             SizedBox(height: 20),
-            _image != null
+            _images.isNotEmpty
                 ? Container(
                     width: MediaQuery.of(context).size.width,
                     height: MediaQuery.of(context).size.height * 0.5,
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: FileImage(_image!),
-                        fit: BoxFit.cover,
-                      ),
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _images.length,
+                      itemBuilder: (context, index) {
+                        return Container(
+                          margin: EdgeInsets.symmetric(horizontal: 5),
+                          width: MediaQuery.of(context).size.width * 0.8,
+                          decoration: BoxDecoration(
+                            image: DecorationImage(
+                              image: FileImage(_images[index]),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   )
                 : Container(),
             SizedBox(height: 20),
-            if (_isImageSelected)
+            if (_images.isNotEmpty)
               Column(
                 children: [
                   ElevatedButton(
-                    onPressed: _convertImageToPng,
-                    child: Text('Convert to PNG'),
+                    onPressed: _convertAllImagesToPng,
+                    child: Text('Convert All to PNG'),
                   ),
                   SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: _convertImageToPdf,
-                    child: Text('Convert to PDF'),
+                    onPressed: _convertAllImagesToPdf,
+                    child: Text('Convert All to PDF'),
                   ),
                 ],
               ),

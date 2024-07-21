@@ -2,7 +2,6 @@ import 'package:HayCam/PreviewPage.dart';
 import 'package:HayCam/imageConvert.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:toggle_switch/toggle_switch.dart';
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -19,6 +18,10 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   bool _isRecording = false;
   int _selectedMode = 0;
   late bool _isFlashOn = false;
+  double _currentZoomLevel = 1.0;
+  double _maxZoomLevel = 8.0;
+  final List<double> _zoomLevels = [1.0, 2.0, 4.0, 6.0, 8.0];
+  final List<String> _menuLabels = ['Camera', 'Video', 'QrCode'];
 
   @override
   void initState() {
@@ -44,12 +47,15 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
 
     final CameraController cameraController = CameraController(
       description,
-      ResolutionPreset.max,
+      ResolutionPreset.medium,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
 
     try {
       await cameraController.initialize();
+      double maxZoomLevel = await cameraController.getMaxZoomLevel();
+      _maxZoomLevel = maxZoomLevel > 8.0 ? 8.0 : maxZoomLevel;
+
       if (mounted) {
         setState(() {
           _controller = cameraController;
@@ -189,6 +195,16 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _updateZoomLevel(double zoomLevel) async {
+    try {
+      if (_controller != null && _controller!.value.isInitialized) {
+        await _controller?.setZoomLevel(zoomLevel);
+      }
+    } catch (e) {
+      debugPrint('Error setting zoom level: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -223,35 +239,56 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                       ? Center(child: CircularProgressIndicator())
                       : CameraPreview(_controller!),
                 ),
-                ToggleSwitch(
-                  initialLabelIndex: _selectedMode,
-                  totalSwitches: 3,
-                  labels: ['Photo', 'Video', 'QR Code'],
-                  onToggle: (index) {
-                    setState(() {
-                      _selectedMode = index!;
-                      if (_selectedMode == 2) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ImageConvert(),
-                          ),
-                        );
-                      }
-                    });
-                  },
+                Container(
+                  height: 50,
+                  child: Center(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(_menuLabels.length, (index) {
+                          return Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: TextButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedMode = index;
+                                  if (_selectedMode == 2) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ImageConvert(),
+                                      ),
+                                    );
+                                  }
+                                });
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: _selectedMode == index
+                                    ? Colors.blue
+                                    : Colors.grey,
+                              ),
+                              child: Text(
+                                _menuLabels[index],
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: _selectedMode == index
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                  ),
                 ),
                 if (_selectedMode != 2)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      IconButton(
-                        onPressed: toggleFlashLight,
-                        icon: Icon(
-                          _isFlashOn ? Icons.flash_off : Icons.flash_on,
-                          color: Colors.white,
-                        ),
-                      ),
                       IconButton(
                         icon: Icon(Icons.switch_camera_rounded,
                             color: Colors.white),
@@ -274,7 +311,44 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
                             color: Colors.red,
                           ),
                         ),
+                      IconButton(
+                        onPressed: toggleFlashLight,
+                        icon: Icon(
+                          _isFlashOn ? Icons.flash_off : Icons.flash_on,
+                          color: Colors.white,
+                        ),
+                      ),
                     ],
+                  ),
+                if (_isCameraInitialized)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: SizedBox(
+                      height: 50,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: _zoomLevels.map((zoomLevel) {
+                          return Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 8.0),
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                setState(() {
+                                  _currentZoomLevel = zoomLevel;
+                                });
+                                await _updateZoomLevel(_currentZoomLevel);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _currentZoomLevel == zoomLevel
+                                    ? Colors.blue
+                                    : Colors.grey,
+                              ),
+                              child: Text('${zoomLevel.toStringAsFixed(1)}x'),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
                   ),
               ],
             )
